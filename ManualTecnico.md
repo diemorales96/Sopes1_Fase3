@@ -3,7 +3,7 @@
 ## Arquitectura Implementada
 ---
 <p align="center"> 
-  <img align="center" width="700px" src="imgs/Arq.png" />
+  <img align="center" width="700px" src="imgs/arq.png" />
 </p>
 
 ---
