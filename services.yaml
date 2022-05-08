@@ -1,0 +1,280 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: app-kafka
+  name: app-kafka
+  namespace: squidgame
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-kafka
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      annotations:
+        linkerd.io/inject: enabled      
+      labels:
+        app: app-kafka
+
+    spec:
+      containers:
+        - image: jpinedae/api_server_201404405
+          name: server-grpc-kafka
+          ports:
+            - containerPort: 50051
+        - image: jpinedae/api_client_grpc_201404405
+          name: client-grpc-kafka
+          ports:
+            - containerPort: 3000
+          resources: {}
+
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: conejo-app
+  name: conejo-app
+  namespace: squidgame
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: conejo-app
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      annotations:
+        linkerd.io/inject: enabled        
+      labels:
+        app: conejo-app
+      
+    spec:
+      containers:
+      - image: diemorales96/server_grpc_201503958
+        name: server-grpc-rabbit
+        ports:
+          - containerPort: 50051
+      - image: diemorales96/api_client_grpc_201503958
+        name: client-grpc-rabbit
+        ports:
+          - containerPort: 3000
+        resources: {}
+        
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: conejo-app
+  name: conejo-app
+  namespace: squidgame
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app: conejo-app
+  
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: worker-rabbit
+  name: worker-rabbit
+  namespace: squidgame
+spec:
+  selector:
+    matchLabels:
+      app: worker-rabbit
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: worker-rabbit
+    spec:
+      containers:
+      - image: diemorales96/suscriber_201503958
+        name: worker-rabbit
+status: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: frontend-react
+  name: frontend-react
+  namespace: squidgame
+spec:
+  selector:
+    matchLabels:
+      app: frontend-react
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: frontend-react
+    spec:
+      containers:
+      - image: dannloa/frontendf3
+        name: frontend-react
+        ports:
+          - containerPort: 3000
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  
+  labels:
+    app: frontend-react
+  name: frontend-react
+  namespace: squidgame
+spec:
+  type: NodePort
+  ports:
+    - port: 3000
+      protocol: TCP
+      targetPort: 3000
+  selector:
+    app: front-react
+
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  
+  labels:
+    app: app-kafka
+  name: app-kafka
+  namespace: squidgame
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      protocol: TCP
+      targetPort: 3000
+  selector:
+    app: app-kafka
+
+status:
+  loadBalancer: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-kafka
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/service-upstream: "true"
+  namespace: squidgame
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: "104.198.237.28.nip.io"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: app-kafka
+            port:
+              number: 3000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: error-injector
+  namespace: squidgame
+data:
+ nginx.conf: |-
+    events {}
+    http {
+        server {
+          listen 3000;
+            location / {
+                return 500;
+            }
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: error-injector
+  namespace: squidgame
+  labels:
+    app: error-injector
+spec:
+  selector:
+    matchLabels:
+      app: error-injector
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        linkerd.io/inject: enabled
+      labels:
+        app: error-injector
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: error-injector
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: error-injector
+  namespace: squidgame
+spec:
+  ports:
+  - name: service
+    port: 3000
+  selector:
+    app: error-injector
+---
+apiVersion: split.smi-spec.io/v1alpha1
+kind: TrafficSplit
+metadata:
+  name: error-split
+  namespace: squidgame
+spec:
+  service: app-kafka
+  backends:
+  - service: app-kafka
+    weight: 450m
+  - service: error-injector
+    weight: 100m
+  - service: conejo-app
+    weight: 450m

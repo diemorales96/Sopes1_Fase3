@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: conejo-app
+  name: conejo-app
+  namespace: squidgame
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: conejo-app
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: conejo-app
+      
+    spec:
+      containers:
+      - image: dannloa/server_grpc_201700390
+        name: server-grpc-rabbit
+        ports:
+          - containerPort: 50051
+      - image: dannloa/api_client_grpc_201700390
+        name: client-grpc-rabbit
+        ports:
+          - containerPort: 2000
+        resources: {}
+        
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: conejo-app
+  name: conejo-app
+  namespace: squidgame
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    protocol: TCP
+    targetPort: 3000
+  selector:
+    app: conejo-app
+  
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: worker-rabbit
+  name: worker-rabbit
+  namespace: squidgame
+spec:
+  selector:
+    matchLabels:
+      app: worker-rabbit
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: worker-rabbit
+    spec:
+      containers:
+      - image: dannloa/suscriber_201700390
+        name: worker-rabbit
+status: {}
